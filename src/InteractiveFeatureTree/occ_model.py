@@ -1,8 +1,11 @@
-from enthought.traits.api import (HasTraits, Property, Bool, Tuple, 
+from enthought.traits.api import (HasTraits, Property, Bool, 
                         on_trait_change, cached_property, Instance,
-                        Float, List
+                        Float as _Float, List, Str, Enum
                                   )
 
+from enthought.traits.ui.api import View, Item
+
+from utils import Tuple, EditorTraits
 
 from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp
 
@@ -10,7 +13,12 @@ from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp
 Input = Instance(klass="ProcessObject", process_input=True)
 
 
+class Float(EditorTraits, _Float):
+    pass
+
 class ProcessObject(HasTraits):
+    name = Str
+    
     modified = Bool
     
     label = Instance(TDF.TDF_Label)
@@ -47,12 +55,17 @@ class ProcessObject(HasTraits):
 
       
 class BlockSource(ProcessObject):
+    name = "Block"
     dims = Tuple(10.0,20.0,30.0)
     position = Tuple(0.,0.,0.)
     x_axis = Tuple(1.,0.,0.)
     z_axis = Tuple(0.,0.,1.)
     
-    def _dims_changed(self):
+    traits_view = View('name',
+                       'dims')
+    
+    @on_trait_change("dims, position, x_axis, z_axis")
+    def on_edit(self):
         self.modified = True
 
     def execute(self):
@@ -62,12 +75,48 @@ class BlockSource(ProcessObject):
         m_box = BRepPrimAPI.BRepPrimAPI_MakeBox(ax, *self.dims)
         return m_box.Shape()
         
-class SphereSource(ProcessObject):
-    radius = Float(5.0)
         
-class CutFilter(ProcessObject):
+class SphereSource(ProcessObject):
+    name="Sphere"
+    radius = Float(5.0)
+    position = Tuple(0.,0.,0.)
+    
+    traits_view = View('name',
+                       'radius',
+                       'position')
+    
+    @on_trait_change("radius, position")
+    def on_edit(self):
+        self.modified = True
+        
+    def execute(self):
+        pt = gp.gp_Pnt(*self.position)
+        R = self.radius
+        sph = BRepPrimAPI.BRepPrimAPI_MakeSphere(pt, R)
+        return sph.Shape()
+        
+class BooleanOpFilter(ProcessObject):
+    name = "Boolean Operation"
     input = Input
     tool = Input
+    
+    operation = Enum("cut", "fuse", "common")
+    
+    map = {'cut': BRepAlgoAPI.BRepAlgoAPI_Cut,
+           'fuse': BRepAlgoAPI.BRepAlgoAPI_Fuse,
+           'common': BRepAlgoAPI.BRepAlgoAPI_Common}
+    
+    traits_view = View('operation')
+    
+    def _operation_changed(self, vnew):
+        self.name = "Boolean Op: %s"%vnew
+        self.modified = True
+        
+    def execute(self):
+        builder = self.map[self.operation]
+        s1 = self.input.shape
+        s2 = self.tool.shape
+        return builder(s1, s2).Shape()
         
 if __name__=="__main__":
     

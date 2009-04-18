@@ -12,7 +12,7 @@ from occ_model import Input, ProcessObject
 import wx
 
 import os
-os.environ['CSF_GraphicShr'] = r"/usr/local/lib/libTKOpenGL.so"
+os.environ['CSF_GraphicShr'] = r"/usr/local/lib/libTKOpenGl.so"
 
 def MakeCanvas(parent, editor):
     canvas = wxViewer3d(parent)
@@ -23,7 +23,7 @@ def MakeCanvas(parent, editor):
         print "is shown", canvas.IsShown()
         wx.SafeYield()
         canvas.InitDriver()
-        viewer = canvas._3dDisplay
+        viewer = canvas._display
         context = viewer.Context
         for shape in shapes:
             ais_shape = shape.ais_shape
@@ -59,13 +59,16 @@ class DisplayShape(HasTraits):
         if vold is not None:
             vold.on_trait_change(self.on_modified, "modified", remove=True)
         vnew.on_trait_change(self.on_modified, "modified")
-        self._input_list = [vnew]
+        self._input = [vnew]
 
-    def on_modified(self):
+    def on_modified(self, vnew):
         if vnew is True:
             shape = self.input.shape
             self.ais_shape.Set(shape)
             self.render = True
+            
+    def _ais_shape_default(self):
+        return AIS.AIS_Shape(self.input.shape)
 
 
 class ShapeList(HasTraits):
@@ -101,7 +104,7 @@ class OCCModel(HasTraits):
     traits_view=View(HSplit(
                     Item('shape_list', editor=occ_tree, show_label=False),
                     Item('shape_list', editor=CustomEditor(MakeCanvas),
-                            show_label=False)
+                            show_label=False, resizable=True)
                         ),
                     Item("render_btn", show_label=False),
                     resizable=True,
