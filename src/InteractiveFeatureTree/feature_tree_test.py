@@ -1,4 +1,4 @@
-from occ_model import BlockSource, SphereSource, BooleanOpFilter
+from occ_model import BlockSource, SphereSource, BooleanOpFilter, ChamferFilter
 
 from occ_display import OCCModel, DisplayShape
 
@@ -6,13 +6,15 @@ block = BlockSource()
 
 sphere = SphereSource()
 
-bop = BooleanOpFilter(input=block, tool=sphere)
+chamfer = ChamferFilter(input=block)
+
+bop = BooleanOpFilter(input=chamfer, tool=sphere)
 
 shape = DisplayShape(input=bop)
 
 model = OCCModel(shapes=[shape])
 
-print shape._input
+print chamfer.shape
 
 model.configure_traits()
 

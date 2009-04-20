@@ -7,7 +7,9 @@ from enthought.traits.ui.api import View, Item
 
 from utils import Tuple, EditorTraits
 
-from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp
+from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp, BRepFilletAPI
+
+from OCC.Utils import Topology
 
     
 Input = Instance(klass="ProcessObject", process_input=True)
@@ -19,11 +21,13 @@ class Float(EditorTraits, _Float):
 class ProcessObject(HasTraits):
     name = Str
     
-    modified = Bool
+    modified = Bool(True)
     
     label = Instance(TDF.TDF_Label)
     
-    shape = Property(Instance(TopoDS.TopoDS_Shape), depends_on="modified")
+    _shape = Instance(TopoDS.TopoDS_Shape)
+    
+    shape = Property(Instance(TopoDS.TopoDS_Shape))
 
     _inputs = List
       
@@ -42,11 +46,14 @@ class ProcessObject(HasTraits):
         if vnew:
             self.modified = True
         
-    @cached_property
     def _get_shape(self):
-        shape = self.execute()
-        self.modified = False
-        return shape
+        if self.modified:
+            shape = self.execute()
+            self._shape = shape
+            self.modified = False
+            return shape
+        else:
+            return self._shape
         
     def execute(self):
         """return a TopoDS_Shape object"""
@@ -117,6 +124,56 @@ class BooleanOpFilter(ProcessObject):
         s1 = self.input.shape
         s2 = self.tool.shape
         return builder(s1, s2).Shape()
+        
+        
+class ChamferFilter(ProcessObject):
+    name = "Chamfer"
+    input = Input
+    
+    distance1 = Float(1.0)
+    
+    distance2 = Float(1.0)
+    
+    edges = List([1])
+    
+    faces = List([0])
+    
+    traits_view = View(Item('distance1'),
+                            Item('distance2'),
+                            Item('edges'),
+                            Item('faces'))
+    
+    @on_trait_change("distance1, distance2, edges, faces")
+    def on_edit(self):
+        self.modified = True
+    
+    def execute(self):
+        print self.input.shape
+        topo = Topology.Topo(self.input.shape)
+        all_edges = list(topo.edges())
+        all_faces = list(topo.faces())
+        print all_edges
+        edges = [all_edges[i] for i in self.edges]
+        faces = [all_faces[i] for i in self.faces]
+        print edges
+        print "faces", faces
+        #~ for e in edges:
+            #~ print topo.number_of_faces_from_edge(e)
+        #~ for e in edges:
+            #~ for face in topo.faces_from_edge(e):
+                #~ print face
+        #~ faces = [list(topo.faces_from_edge(e)) for e in edges]
+        #~ print faces
+        chamf = BRepFilletAPI.BRepFilletAPI_MakeChamfer(self.input.shape)
+        for e,f in zip(edges, faces):
+            chamf.Add(self.distance1,
+                            self.distance2,
+                            e,
+                            f)
+        chamf.Build()
+        print "done", chamf.IsDone()
+        return chamf.Shape()
+    
         
 if __name__=="__main__":
     
