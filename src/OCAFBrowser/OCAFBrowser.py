@@ -259,7 +259,7 @@ if __name__=="__main__":
     
     app = App()
     #fname = "/home/bryan/Shared/CAD-models/SP1000 NUDT- Reflection Module with Optics Plate Assy/SP1000 NUDT Reflection Module with Optics Plate Assy.stp"
-    fname = "/home/bryan/Documents/Projects/s3000/OpticsLayout_9-4-09_wires.step"
+    fname = "/home/bryan/Documents/Projects/IowaCW&PulsesTender/OpticalModels/IowaRayTrace_150mm_21-4-09.step"
     app.LoadSTEPFile(fname)
     
     doc = app.MakeNewDoc()

@@ -7,30 +7,55 @@ from enthought.traits.ui.api import View, Item
 
 from utils import Tuple, EditorTraits
 
-from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp, BRepFilletAPI
+from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp
 
-from OCC.Utils import Topology
-
-    
+###defining an dedicated trait for filter inputs means 
+###we can track input changes easily
 Input = Instance(klass="ProcessObject", process_input=True)
 
 
 class Float(EditorTraits, _Float):
-    pass
+    """I define my own Float trait because I want to change the
+    default behaviour of the default editors to have auto_set=False"""
+    
 
 class ProcessObject(HasTraits):
+    """
+    Base class for all model component objects
+    """
     name = Str
     
+    #
+    #This flag indicates if the object parameters have changed
+    #
     modified = Bool(True)
     
+    #
+    #We could link each process-object to a node in an OCAF document
+    #Not used yet.
+    #
     label = Instance(TDF.TDF_Label)
     
-    _shape = Instance(TopoDS.TopoDS_Shape)
-    
+    #
+    #This is the output of the object. The property calls the execute method
+    #to evaluate the result (which in turn calls up the tree)
+    #
     shape = Property(Instance(TopoDS.TopoDS_Shape))
+    
+    #
+    #Shadow trait which stores the cached shape
+    #
+    _shape = Instance(TopoDS.TopoDS_Shape)
 
+    #
+    #A list of all inputs, for the benefit of the TreeEditor
+    #
     _inputs = List
       
+    #
+    #We hook up listeners to each input to listen to changes in their
+    #modification trait. Hence, modifications propagate down the tree
+    #
     @on_trait_change("+process_input")
     def on_input_change(self, obj, name, vold, vnew):
         print "ch", vold, vnew
@@ -63,13 +88,16 @@ class ProcessObject(HasTraits):
       
 class BlockSource(ProcessObject):
     name = "Block"
-    dims = Tuple(10.0,20.0,30.0)
-    position = Tuple(0.,0.,0.)
-    x_axis = Tuple(1.,0.,0.)
-    z_axis = Tuple(0.,0.,1.)
+    dims = Tuple(10.0,20.0,30.0, editor_traits={'cols':3})
+    position = Tuple(0.,0.,0., editor_traits={'cols':3})
+    x_axis = Tuple(1.,0.,0., editor_traits={'cols':3})
+    z_axis = Tuple(0.,0.,1., editor_traits={'cols':3})
     
     traits_view = View('name',
-                       'dims')
+                       'dims',
+                       'position',
+                       'x_axis',
+                       'z_axis')
     
     @on_trait_change("dims, position, x_axis, z_axis")
     def on_edit(self):
@@ -86,7 +114,7 @@ class BlockSource(ProcessObject):
 class SphereSource(ProcessObject):
     name="Sphere"
     radius = Float(5.0)
-    position = Tuple(0.,0.,0.)
+    position = Tuple(0.,0.,0., editor_traits={'cols':3})
     
     traits_view = View('name',
                        'radius',
@@ -101,6 +129,7 @@ class SphereSource(ProcessObject):
         R = self.radius
         sph = BRepPrimAPI.BRepPrimAPI_MakeSphere(pt, R)
         return sph.Shape()
+        
         
 class BooleanOpFilter(ProcessObject):
     name = "Boolean Operation"
@@ -125,61 +154,5 @@ class BooleanOpFilter(ProcessObject):
         s2 = self.tool.shape
         return builder(s1, s2).Shape()
         
-        
-class ChamferFilter(ProcessObject):
-    name = "Chamfer"
-    input = Input
-    
-    distance1 = Float(1.0)
-    
-    distance2 = Float(1.0)
-    
-    edges = List([1])
-    
-    faces = List([0])
-    
-    traits_view = View(Item('distance1'),
-                            Item('distance2'),
-                            Item('edges'),
-                            Item('faces'))
-    
-    @on_trait_change("distance1, distance2, edges, faces")
-    def on_edit(self):
-        self.modified = True
-    
-    def execute(self):
-        print self.input.shape
-        topo = Topology.Topo(self.input.shape)
-        all_edges = list(topo.edges())
-        all_faces = list(topo.faces())
-        print all_edges
-        edges = [all_edges[i] for i in self.edges]
-        faces = [all_faces[i] for i in self.faces]
-        print edges
-        print "faces", faces
-        #~ for e in edges:
-            #~ print topo.number_of_faces_from_edge(e)
-        #~ for e in edges:
-            #~ for face in topo.faces_from_edge(e):
-                #~ print face
-        #~ faces = [list(topo.faces_from_edge(e)) for e in edges]
-        #~ print faces
-        chamf = BRepFilletAPI.BRepFilletAPI_MakeChamfer(self.input.shape)
-        for e,f in zip(edges, faces):
-            chamf.Add(self.distance1,
-                            self.distance2,
-                            e,
-                            f)
-        chamf.Build()
-        print "done", chamf.IsDone()
-        return chamf.Shape()
-    
-        
-if __name__=="__main__":
-    
-    c1 = CutFilter()
-    c2 = CutFilter()
-    c3 = CutFilter(input=c1, tool=c2)
-    
-    print c3.shape
+
     
