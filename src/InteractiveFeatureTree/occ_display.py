@@ -9,43 +9,76 @@ from OCC import AIS
 
 from occ_model import Input, ProcessObject
 
-import wx
-
+#Jelle please don't shout at me!
 import os
 os.environ['CSF_GraphicShr'] = r"/usr/local/lib/libTKOpenGl.so"
 
-def MakeCanvas(parent, editor):
-    canvas = wxViewer3d(parent)
-    shapes = editor.object.shape_list.shapes
-    
-    def display_gen():
-        canvas.Show()
-        print "is shown", canvas.IsShown()
-        wx.SafeYield()
-        canvas.InitDriver()
-        viewer = canvas._display
-        context = viewer.Context
-        for shape in shapes:
+
+class MyCanvas(wxViewer3d):
+    def __init__(self, *args, **kwds):
+        super(MyCanvas, self).__init__(*args, **kwds)
+        self.SetSizeWH(800,-1)
+        self.Bind(wx.EVT_PAINT, self.OnPaint)
+        
+        self._pending = []
+        self.context = None
+        
+    def OnPaint(self, event):
+        event.Skip()
+        if self.context is None:
+            self.FirstDisplay()
+        
+    def Display(self, shape):
+        context = self.context
+        if context is None:
+            self._pending.append(shape)
+        else:
             ais_shape = shape.ais_shape
             context.Display(ais_shape.GetHandle())
-        yield
-        while True:
+            
+    def Render(self):
+        context = self.context
+        if context is not None:
             context.Redisplay(AIS.AIS_KOI_Shape)
-            yield
+            
+    def FirstDisplay(self):
+        self.InitDriver()
+        viewer = self._display
+        self.context = viewer.Context
+        for shape in self._pending:
+            self.Display(shape)
+        self._pending = []
+        self._display.FitAll()
 
-    gen = display_gen()
+def MakeCanvas(parent, editor):
+    """
+    A factory function to produce the wxViewer3d instance. This is
+    called by the CustomEditor object.
+    
+    I still havn't found a nice way to do the InitDriver() stuff.
+    """
+    canvas = MyCanvas(parent)
+    shapes = editor.object.shape_list.shapes
 
     def on_render(obj, name, vnew):
-        print "render"
-        gen.next()
+        canvas.Render()
 
     for shape in shapes:
+        canvas.Display(shape)
         shape.on_trait_change(on_render, "render")
+    
     return canvas
 
 
 class DisplayShape(HasTraits):
-    """A displayable shape"""
+    """
+    A display-able shape. This class wraps AIS.AIS_Shape.
+    
+    Instances of this class are the root shape objects in the model
+    and are the things we actually visualise.
+    
+    We could add visualisation traits to this object
+    """
     name = Str("an AIS shape")
     input = Input
 
@@ -72,6 +105,11 @@ class DisplayShape(HasTraits):
 
 
 class ShapeList(HasTraits):
+    """
+    Just a container for DisplayShapes. This exists mostly 
+    because the TreeEditor expects child nodes on a single
+    sub-object. A simple list doesn't work.
+    """
     shapes = List(DisplayShape)
     
 
@@ -98,25 +136,24 @@ class OCCModel(HasTraits):
     shapes = List
     
     shape_list = Instance(ShapeList)
-    
-    render_btn = Button("render")
 
     traits_view=View(HSplit(
-                    Item('shape_list', editor=occ_tree, show_label=False),
+                    Item('shape_list', editor=occ_tree, show_label=False,
+                         width=-300),
                     Item('shape_list', editor=CustomEditor(MakeCanvas),
-                            show_label=False, resizable=True)
+                            show_label=False, resizable=True),
+                        id="occ.traits.test_feature_model_layout",
+                        dock="fixed"
                         ),
-                    Item("render_btn", show_label=False),
                     resizable=True,
                     width=1000,
-                    height=800
+                    height=800,
+                    id="occ.traits.test_feature_model"
                     )
                     
     def _shapes_changed(self, vnew):
         self.shape_list = ShapeList(shapes=vnew)
         
-    def _render_btn_changed(self):
-        self.shape_list.shapes[0].render = True
                     
 
 

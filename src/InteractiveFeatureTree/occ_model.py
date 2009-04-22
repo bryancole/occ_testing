@@ -9,24 +9,53 @@ from utils import Tuple, EditorTraits
 
 from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp
 
-    
+###defining an dedicated trait for filter inputs means 
+###we can track input changes easily
 Input = Instance(klass="ProcessObject", process_input=True)
 
 
 class Float(EditorTraits, _Float):
-    pass
+    """I define my own Float trait because I want to change the
+    default behaviour of the default editors to have auto_set=False"""
+    
 
 class ProcessObject(HasTraits):
+    """
+    Base class for all model component objects
+    """
     name = Str
     
-    modified = Bool
+    #
+    #This flag indicates if the object parameters have changed
+    #
+    modified = Bool(True)
     
+    #
+    #We could link each process-object to a node in an OCAF document
+    #Not used yet.
+    #
     label = Instance(TDF.TDF_Label)
     
-    shape = Property(Instance(TopoDS.TopoDS_Shape), depends_on="modified")
+    #
+    #This is the output of the object. The property calls the execute method
+    #to evaluate the result (which in turn calls up the tree)
+    #
+    shape = Property(Instance(TopoDS.TopoDS_Shape))
+    
+    #
+    #Shadow trait which stores the cached shape
+    #
+    _shape = Instance(TopoDS.TopoDS_Shape)
 
+    #
+    #A list of all inputs, for the benefit of the TreeEditor
+    #
     _inputs = List
       
+    #
+    #We hook up listeners to each input to listen to changes in their
+    #modification trait. Hence, modifications propagate down the tree
+    #
     @on_trait_change("+process_input")
     def on_input_change(self, obj, name, vold, vnew):
         print "ch", vold, vnew
@@ -42,11 +71,14 @@ class ProcessObject(HasTraits):
         if vnew:
             self.modified = True
         
-    @cached_property
     def _get_shape(self):
-        shape = self.execute()
-        self.modified = False
-        return shape
+        if self.modified:
+            shape = self.execute()
+            self._shape = shape
+            self.modified = False
+            return shape
+        else:
+            return self._shape
         
     def execute(self):
         """return a TopoDS_Shape object"""
@@ -56,13 +88,16 @@ class ProcessObject(HasTraits):
       
 class BlockSource(ProcessObject):
     name = "Block"
-    dims = Tuple(10.0,20.0,30.0)
-    position = Tuple(0.,0.,0.)
-    x_axis = Tuple(1.,0.,0.)
-    z_axis = Tuple(0.,0.,1.)
+    dims = Tuple(10.0,20.0,30.0, editor_traits={'cols':3})
+    position = Tuple(0.,0.,0., editor_traits={'cols':3})
+    x_axis = Tuple(1.,0.,0., editor_traits={'cols':3})
+    z_axis = Tuple(0.,0.,1., editor_traits={'cols':3})
     
     traits_view = View('name',
-                       'dims')
+                       'dims',
+                       'position',
+                       'x_axis',
+                       'z_axis')
     
     @on_trait_change("dims, position, x_axis, z_axis")
     def on_edit(self):
@@ -79,7 +114,7 @@ class BlockSource(ProcessObject):
 class SphereSource(ProcessObject):
     name="Sphere"
     radius = Float(5.0)
-    position = Tuple(0.,0.,0.)
+    position = Tuple(0.,0.,0., editor_traits={'cols':3})
     
     traits_view = View('name',
                        'radius',
@@ -94,6 +129,7 @@ class SphereSource(ProcessObject):
         R = self.radius
         sph = BRepPrimAPI.BRepPrimAPI_MakeSphere(pt, R)
         return sph.Shape()
+        
         
 class BooleanOpFilter(ProcessObject):
     name = "Boolean Operation"
@@ -118,11 +154,5 @@ class BooleanOpFilter(ProcessObject):
         s2 = self.tool.shape
         return builder(s1, s2).Shape()
         
-if __name__=="__main__":
-    
-    c1 = CutFilter()
-    c2 = CutFilter()
-    c3 = CutFilter(input=c1, tool=c2)
-    
-    print c3.shape
+
     
